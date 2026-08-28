@@ -1,0 +1,50 @@
+#!/usr/bin/env sh
+#
+# Run the plugin's tests.
+#
+# Uses whatever `php` is on PATH. If there is none -- which is the normal state
+# of a machine that works on the TypeScript half of PokoBlog -- it falls back to
+# a PHP container, so the suite runs without asking anybody to install PHP.
+#
+# The container image is overridable, because the right one is whatever is
+# already on the machine:
+#
+#   POKOBLOG_PHP_IMAGE=php:8.3-cli plugins/wordpress/bin/test
+#
+# Arguments are passed through, so a single named test is:
+#
+#   plugins/wordpress/bin/test --only "the same article sent twice"
+
+set -eu
+
+plugin_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+if command -v php >/dev/null 2>&1; then
+	exec php "$plugin_dir/tests/run.php" "$@"
+fi
+
+image=${POKOBLOG_PHP_IMAGE:-ghcr.io/dockergiant/php-fpm-magento2:8.4-node19}
+
+if ! command -v docker >/dev/null 2>&1; then
+	echo "no php and no docker: install one of them, or set POKOBLOG_PHP_IMAGE" >&2
+	exit 1
+fi
+
+echo "no local php; running the suite in $image" >&2
+
+# `--entrypoint php` because the image is a php-fpm image whose entrypoint sets
+# up a web server. `-w` so the suite's relative paths resolve the same way they
+# do outside the container.
+#
+# `-u` matters more than it looks. One test makes the fake site root read-only
+# to check the IndexNow fallback, and root ignores permission bits -- as root
+# the write succeeds, the fallback never runs, and the test fails for a reason
+# that has nothing to do with the plugin. Running as the invoking user is also
+# what keeps any file the suite touches under the mount owned by that user.
+exec docker run --rm \
+	--entrypoint php \
+	-u "$(id -u):$(id -g)" \
+	-v "$plugin_dir":/plugin \
+	-w /plugin \
+	"$image" \
+	tests/run.php "$@"
