@@ -1,11 +1,11 @@
 <?php
 /**
  * Plugin Name: PokoBlog
- * Plugin URI: https://pokoblog.com/wordpress
+ * Plugin URI: https://github.com/HeyPoko/pokoblog-wordpress
  * Description: Publishes the articles PokoBlog writes for you as real posts on this site.
  * Version: 1.0.0
- * Author: PokoBlog
- * Author URI: https://pokoblog.com
+ * Author: HeyPoko
+ * Author URI: https://github.com/HeyPoko
  * License: GPL v2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: pokoblog
