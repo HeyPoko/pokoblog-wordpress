@@ -53,11 +53,19 @@ jobs:
       #
       # `tests/` and `bin/test` stay in. Somebody installing from a zip has no
       # other way to find out whether the thing works on their PHP.
+      #
+      # The exclude list is `EXCLUDED` in `apps/web/scripts/pack-clients.ts`
+      # plus `.github` and `.gitignore`, so this zip and the one the dashboard
+      # hands out hold the same files. They differed by a `.gitignore` once,
+      # which is a file landing in every customer's plugin folder for no reason.
       - name: Build the zip
         run: |
           staging=$(mktemp -d)
           mkdir -p "$staging/pokoblog"
-          rsync -a --exclude=.git --exclude=.github --exclude=.DS_Store \
+          rsync -a \
+            --exclude=.git --exclude=.github --exclude=.gitignore \
+            --exclude=.DS_Store --exclude=.composer --exclude=.impeccable \
+            --exclude=.phpunit.cache --exclude=node_modules --exclude=vendor \
             ./ "$staging/pokoblog/"
           (cd "$staging" && zip -qr "$GITHUB_WORKSPACE/pokoblog-wordpress.zip" pokoblog)
           unzip -l pokoblog-wordpress.zip
