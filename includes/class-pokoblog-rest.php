@@ -181,20 +181,34 @@ class PokoBlog_Rest {
 		$missing    = PokoBlog_Payload::missing( $normalized );
 
 		if ( ! empty( $missing ) ) {
-			return new WP_REST_Response(
-				[
-					'ok'      => false,
-					'code'    => 'missing_fields',
-					'missing' => $missing,
-				],
+			$result = [
+				'ok'      => false,
+				'code'    => 'missing_fields',
+				'missing' => $missing,
+			];
+
+			PokoBlog_Log::record(
+				isset( $normalized['article_id'] ) ? $normalized['article_id'] : '',
+				$result,
 				400
 			);
+
+			return new WP_REST_Response( $result, 400 );
 		}
 
 		$result = PokoBlog_Publisher::publish( $normalized );
 
 		if ( ! $result['ok'] ) {
-			return new WP_REST_Response( $result, self::status_for( $result['code'] ) );
+			$status = self::status_for( $result['code'] );
+
+			PokoBlog_Log::record(
+				$normalized['article_id'],
+				$result,
+				$status,
+				'' !== $normalized['featured_image_url']
+			);
+
+			return new WP_REST_Response( $result, $status );
 		}
 
 		$result['post_url'] = get_permalink( $result['post_id'] );
@@ -207,7 +221,22 @@ class PokoBlog_Rest {
 		 * support conversation about a duplicate can be settled by looking at a
 		 * log.
 		 */
-		return new WP_REST_Response( $result, $result['created'] ? 201 : 200 );
+		$status = $result['created'] ? 201 : 200;
+
+		/*
+		 * Recorded here rather than in the publisher, because this is where
+		 * both outcomes arrive and where the HTTP status is decided -- and the
+		 * status is half of what makes an entry readable later. Never allowed
+		 * to affect the response: see `PokoBlog_Log::record`.
+		 */
+		PokoBlog_Log::record(
+			$normalized['article_id'],
+			$result,
+			$status,
+			'' !== $normalized['featured_image_url']
+		);
+
+		return new WP_REST_Response( $result, $status );
 	}
 
 	private static function status_for( $code ) {
