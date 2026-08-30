@@ -1,0 +1,68 @@
+name: Release
+
+# A tag is the whole trigger. The zip is the install for this plugin -- there is
+# no build step and no registry -- so a tag without one attached is a release
+# nobody can use, which is what v1.0.0 and v1.0.1 were.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          coverage: none
+
+      # Before the zip, so a tag on a broken tree produces no release at all
+      # rather than a downloadable one that fails on somebody's site.
+      - name: Tests
+        run: bin/test
+
+      # WordPress shows the header version on the plugins screen, so a mismatch
+      # tells a site owner they are on a release they are not on. It has already
+      # happened once: v1.1.0 was tagged while the header still said 1.0.0.
+      - name: The header version matches the tag
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          header=$(sed -n 's/^ \* Version: *//p' pokoblog.php | head -1)
+          constant=$(sed -n "s/.*POKOBLOG_VERSION', *'\([^']*\)'.*/\1/p" pokoblog.php | head -1)
+
+          for found in "$header" "$constant"; do
+            if [ "$found" != "$tag" ]; then
+              echo "tag $tag, but pokoblog.php says '$found'" >&2
+              exit 1
+            fi
+          done
+
+          echo "pokoblog.php and $GITHUB_REF_NAME agree on $tag"
+
+      # Staged under `pokoblog/` because that is the directory name WordPress
+      # will create, and the plugin's text domain is `pokoblog`: unzip it under
+      # any other name and translations stop resolving. GitHub's own source
+      # archives wrap everything in `<repo>-<ref>/`, which is why they are not a
+      # substitute for this file.
+      #
+      # `tests/` and `bin/test` stay in. Somebody installing from a zip has no
+      # other way to find out whether the thing works on their PHP.
+      - name: Build the zip
+        run: |
+          staging=$(mktemp -d)
+          mkdir -p "$staging/pokoblog"
+          rsync -a --exclude=.git --exclude=.github --exclude=.DS_Store \
+            ./ "$staging/pokoblog/"
+          (cd "$staging" && zip -qr "$GITHUB_WORKSPACE/pokoblog-wordpress.zip" pokoblog)
+          unzip -l pokoblog-wordpress.zip
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: pokoblog-wordpress.zip
+          generate_release_notes: true

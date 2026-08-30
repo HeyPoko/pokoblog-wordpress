@@ -21,11 +21,21 @@ their permalink, in HTML. Anything that can read a web page can read it.
 
 ## Installing
 
-1. Copy `plugins/wordpress/` into `wp-content/plugins/pokoblog/` (or zip it and
-   upload it through **Plugins → Add New → Upload**).
-2. Activate. A key is minted on activation.
+**From the zip**, which is how most people will do it:
+
+1. Get `pokoblog-wordpress.zip` — from PokoBlog under Connections → WordPress,
+   or from this repository's [latest release](../../releases/latest).
+2. **Plugins → Add New → Upload Plugin**, then activate. A key is minted on
+   activation.
 3. **Settings → PokoBlog** → copy the key.
 4. In PokoBlog: Connections → WordPress → paste the site address and the key.
+
+**From source**, copy the files in this directory into
+`wp-content/plugins/pokoblog/` and pick up at step 2. The folder has to be
+called `pokoblog`: it is the plugin's text domain, and WordPress finds
+translations by that name. GitHub's own "Download ZIP" button is not the zip
+you want -- it wraps everything in a `pokoblog-wordpress-main/` folder, which
+installs under the wrong name.
 
 PokoBlog calls the site's `/verify` route before it stores anything, so a wrong
 key or a missing plugin is a message at that moment rather than a month of
