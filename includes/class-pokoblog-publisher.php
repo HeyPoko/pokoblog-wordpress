@@ -130,6 +130,25 @@ class PokoBlog_Publisher {
 			$fields['post_category'] = [ $category ];
 		}
 
+		/*
+		 * Slashed on the way in, because `wp_insert_post` unslashes on the way
+		 * through and there is no way to opt out of that.
+		 *
+		 * REST request bodies arrive unslashed, unlike the admin post handlers
+		 * WordPress grew up around, so a body handed straight to the writer
+		 * loses one level of backslashes. Nobody noticed while an article was
+		 * prose: a backslash is rare in a sentence. It is not rare in a shell
+		 * command, and the renderer emits those now --
+		 * `awk '$4 ~ /^\[/'` was stored as `awk '$4 ~ /^[/'` and
+		 * `grep -i 'gvfsd\|\.kw_'` as `grep -i 'gvfsd|.kw_'`, published on the
+		 * customer's blog as commands that do something else.
+		 *
+		 * `wp_slash` is recursive, so `meta_input` is covered by the same call.
+		 * This is what core's own REST posts controller does, one line before
+		 * its own `wp_insert_post`.
+		 */
+		$fields = wp_slash( $fields );
+
 		if ( $existing === null ) {
 			$author = self::author();
 

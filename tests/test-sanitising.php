@@ -80,6 +80,60 @@ test(
 );
 
 test(
+	'a technical article keeps its code, its table and its callout',
+	static function () {
+		pokoblog_test_install_key();
+
+		/*
+		 * The constructs the renderer learned after this plugin was written: a
+		 * fenced code block with its language class, a table inside the wrapper
+		 * that lets it scroll, a callout, a strikethrough and a footnote.
+		 *
+		 * Every one of them is in WordPress's `$allowedposttags`, `class` and
+		 * `id` among the global attributes it adds to all of them. If that ever
+		 * stops being true, an article arrives on the customer's blog with its
+		 * shell commands run together and its comparison table pushing the page
+		 * sideways -- and nothing would have said so.
+		 */
+		$html = '<blockquote class="poko-callout poko-callout-warning"><p>Let op.</p></blockquote>'
+			. '<pre><code class="language-bash">ps -eo args | awk \'$4 ~ /^\\[/\'</code></pre>'
+			. '<div class="poko-table-wrap"><table><thead><tr><th>A</th>'
+			. '<th align="right">B</th></tr></thead><tbody><tr><td>1</td>'
+			. '<td align="right">2</td></tr></tbody></table></div>'
+			. '<ul><li class="poko-task poko-task-done">☑ gedaan</li></ul>'
+			. '<p>Een <del>fout</del> zin.<sup id="poko-fnref-1">'
+			. '<a href="#poko-fn-1">1</a></sup></p>'
+			. '<hr>'
+			. '<section class="poko-footnotes"><ol><li id="poko-fn-1"><p>Nota.</p></li></ol></section>';
+
+		$response = pokoblog_test_publish( [ 'content' => $html ] );
+		$stored   = get_post_field( 'post_content', $response->get_data()['post_id'] );
+
+		assert_same( $html, $stored, 'body' );
+	}
+);
+
+test(
+	'a checkbox would not survive, which is why the renderer does not send one',
+	static function () {
+		pokoblog_test_install_key();
+
+		/*
+		 * Not a guard on our own output -- the renderer cannot produce this.
+		 * It is the evidence for why it cannot: `input` is not in WordPress's
+		 * allowlist, so a task list written the obvious way arrives as a row of
+		 * labels with the state silently gone. The character survives instead.
+		 */
+		$response = pokoblog_test_publish(
+			[ 'content' => '<ul><li><input type="checkbox" checked disabled> gedaan</li></ul>' ]
+		);
+		$stored   = get_post_field( 'post_content', $response->get_data()['post_id'] );
+
+		assert_same( '<ul><li> gedaan</li></ul>', $stored, 'body' );
+	}
+);
+
+test(
 	'the title and the meta description are sanitised too',
 	static function () {
 		pokoblog_test_install_key();
@@ -107,5 +161,33 @@ test(
 
 		assert_same( 400, $response->get_status(), 'status' );
 		assert_same( [ 'content' ], $response->get_data()['missing'], 'missing fields' );
+	}
+);
+
+test(
+	'a backslash in a shell command survives the write',
+	static function () {
+		pokoblog_test_install_key();
+
+		/*
+		 * Found against a real WordPress, not against these stubs, and the
+		 * stubs were taught to unslash afterwards so this test can hold it.
+		 *
+		 * `wp_insert_post` unslashes its fields, so a caller has to slash them
+		 * first -- core's own REST controller does. REST bodies arrive
+		 * unslashed, so without that step one level of backslashes is eaten.
+		 * Nobody saw it while an article was prose. A shell command is full of
+		 * them, and `awk \'$4 ~ /^\\[/\'` published as `awk \'$4 ~ /^[/\'` is a
+		 * command that does something else on the reader\'s server.
+		 */
+		$html = '<pre><code class="language-bash">'
+			. "ps -eo args | awk '\$4 ~ /^\\[/'\n"
+			. "grep -i 'gvfsd\\|\\.kw_' /var/log/syslog"
+			. '</code></pre>';
+
+		$response = pokoblog_test_publish( [ 'content' => $html ] );
+		$stored   = get_post_field( 'post_content', $response->get_data()['post_id'] );
+
+		assert_same( $html, $stored, 'body' );
 	}
 );

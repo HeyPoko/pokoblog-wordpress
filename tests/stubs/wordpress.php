@@ -7,10 +7,10 @@
  * The conventional answer is `phpunit` plus `wp-develop`'s scaffold: it gives
  * you a real WordPress against a real MySQL, and it needs both of those
  * installed, an SVN checkout of core, and a database the test run is allowed to
- * drop. This repository has no PHP toolchain at all -- no `php`, no `composer`,
- * no `phpunit` -- and the plugin is not part of its pnpm workspace and must not
- * be dragged into one. Standing all of that up would be a larger change than
- * the plugin.
+ * drop. This repository has no `composer` and no `phpunit`, the plugin is not
+ * part of its pnpm workspace and must not be dragged into one, and standing all
+ * of that up would be a larger change than the plugin. A `php` binary is enough
+ * to run what is here, and `tests/run.php` needs nothing else.
  *
  * So: in-memory fakes for the twenty-odd WordPress functions this plugin
  * actually calls, and a runner in `tests/run.php`. What that buys is that the
@@ -79,6 +79,8 @@ function pokoblog_test_reset() {
 		'downloads' => [],
 		'thumbnails' => [],
 		'categories' => [],
+		'styles'    => [],
+		'singular'  => null,
 	];
 
 	/* The plugins the fake site has installed. See `tests/stubs/seo.php`. */
@@ -87,6 +89,45 @@ function pokoblog_test_reset() {
 
 function pokoblog_test_set( $key, $value ) {
 	$GLOBALS['pokoblog_test'][ $key ] = $value;
+}
+
+/* -------------------------------------------------------------------------- */
+/* The page being viewed, and the styles put on it                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Which single post, if any, the fake site is showing.
+ *
+ * Null for everything that is not a single post: an index, an archive, a page.
+ * `PokoBlog_Styles` is the only caller and it asks both questions, so both
+ * answers come out of the one value.
+ */
+function pokoblog_test_view( $post_id ) {
+	$GLOBALS['pokoblog_test']['singular'] = $post_id;
+}
+
+function is_singular( $type = '' ) {
+	return null !== $GLOBALS['pokoblog_test']['singular'];
+}
+
+function get_the_ID() {
+	return $GLOBALS['pokoblog_test']['singular'] ?? false;
+}
+
+function wp_register_style( $handle, $src, $deps = [], $version = false ) {
+	$GLOBALS['pokoblog_test']['styles'][ $handle ] = [ 'inline' => '' ];
+
+	return true;
+}
+
+function wp_enqueue_style( $handle ) {
+	$GLOBALS['pokoblog_test']['styles'][ $handle ]['enqueued'] = true;
+}
+
+function wp_add_inline_style( $handle, $css ) {
+	$GLOBALS['pokoblog_test']['styles'][ $handle ]['inline'] .= $css;
+
+	return true;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -324,7 +365,18 @@ function wp_kses_post( $html ) {
 	$html = preg_replace( '@<(script|style)[^>]*?>.*?</\\1>@si', '', $html );
 	$html = preg_replace( '@</?(script|style)[^>]*>@i', '', $html );
 
-	$allowed = [ 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'a', 'strong', 'em', 'code', 'pre', 'br', 'img', 'figure', 'figcaption', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'hr' ];
+	/*
+	 * The subset of WordPress's own `$allowedposttags` that PokoBlog can emit,
+	 * taken from `wp-includes/kses.php` rather than from what would be
+	 * convenient. `div`, `section`, `sup` and `del` are in it, which is what
+	 * lets a table wrapper, a footnote and a strikethrough survive a delivery.
+	 *
+	 * `input` is deliberately absent, and it is absent from WordPress too. That
+	 * is the reason `workflow/html.ts` writes a task list as a character rather
+	 * than as a checkbox: a checkbox is stripped here, and the reader is left
+	 * with a label and no way to tell done from not done.
+	 */
+	$allowed = [ 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'a', 'strong', 'em', 'code', 'pre', 'br', 'img', 'figure', 'figcaption', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'hr', 'div', 'section', 'sup', 'sub', 'del', 's', 'span' ];
 
 	$html = preg_replace_callback(
 		'@<(/?)([a-zA-Z0-9]+)([^>]*)>@',
@@ -372,7 +424,19 @@ function esc_url_raw( $value ) {
 }
 
 function wp_unslash( $value ) {
+	if ( is_array( $value ) ) {
+		return array_map( 'wp_unslash', $value );
+	}
+
 	return is_string( $value ) ? stripslashes( $value ) : $value;
+}
+
+function wp_slash( $value ) {
+	if ( is_array( $value ) ) {
+		return array_map( 'wp_slash', $value );
+	}
+
+	return is_string( $value ) ? addslashes( $value ) : $value;
 }
 
 function wp_json_encode( $value ) {
@@ -400,12 +464,37 @@ function esc_html__( $text, $domain = '' ) {
  * it asked for. The plugin's slug-conflict decision depends on that second half,
  * so the fake has to have it.
  */
+/**
+ * Unslashed on the way in, because core does.
+ *
+ * `wp_insert_post()` runs its fields through `wp_unslash()`, which is why every
+ * caller in core slashes first -- the REST posts controller included. Without
+ * that step modelled here a plugin that forgets to slash passes the suite and
+ * strips one level of backslashes on a real site, which is what happened: a
+ * shell command was published with `/^\[/` written as `/^[/`.
+ */
+function pokoblog_test_unslash_fields( $fields ) {
+	foreach ( [ 'post_title', 'post_content', 'post_excerpt', 'post_name' ] as $key ) {
+		if ( isset( $fields[ $key ] ) ) {
+			$fields[ $key ] = wp_unslash( $fields[ $key ] );
+		}
+	}
+
+	if ( isset( $fields['meta_input'] ) && is_array( $fields['meta_input'] ) ) {
+		$fields['meta_input'] = wp_unslash( $fields['meta_input'] );
+	}
+
+	return $fields;
+}
+
 function wp_insert_post( $fields, $wp_error = false ) {
 	$state = &$GLOBALS['pokoblog_test'];
 
 	if ( isset( $fields['ID'] ) && $fields['ID'] ) {
 		return wp_update_post( $fields, $wp_error );
 	}
+
+	$fields = pokoblog_test_unslash_fields( $fields );
 
 	$id = $state['next_id'];
 	$state['next_id']++;
@@ -439,6 +528,8 @@ function wp_update_post( $fields, $wp_error = false ) {
 	if ( ! isset( $state['posts'][ $id ] ) ) {
 		return $wp_error ? new WP_Error( 'invalid_post', 'no such post' ) : 0;
 	}
+
+	$fields = pokoblog_test_unslash_fields( $fields );
 
 	foreach ( [ 'post_title', 'post_content', 'post_excerpt', 'post_status', 'post_type', 'post_category' ] as $field ) {
 		if ( array_key_exists( $field, $fields ) ) {
