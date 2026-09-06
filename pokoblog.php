@@ -69,6 +69,7 @@ require_once __DIR__ . '/includes/class-pokoblog-media.php';
 require_once __DIR__ . '/includes/class-pokoblog-publisher.php';
 require_once __DIR__ . '/includes/class-pokoblog-indexnow.php';
 require_once __DIR__ . '/includes/class-pokoblog-rest.php';
+require_once __DIR__ . '/includes/class-pokoblog-styles.php';
 require_once __DIR__ . '/includes/class-pokoblog-admin.php';
 
 /**
@@ -84,6 +85,7 @@ function pokoblog_boot() {
 	PokoBlog_Admin::register();
 	PokoBlog_Rest::register();
 	PokoBlog_IndexNow::register();
+	PokoBlog_Styles::register();
 }
 
 pokoblog_boot();
