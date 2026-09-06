@@ -3,7 +3,7 @@
  * Plugin Name: PokoBlog
  * Plugin URI: https://github.com/HeyPoko/pokoblog-wordpress
  * Description: Publishes the articles PokoBlog writes for you as real posts on this site.
- * Version: 1.1.0
+ * Version: 1.2.0
  * Author: HeyPoko
  * Author URI: https://github.com/HeyPoko
  * License: GPL v2 or later
@@ -48,7 +48,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'POKOBLOG_VERSION', '1.1.0' );
+define( 'POKOBLOG_VERSION', '1.2.0' );
 define( 'POKOBLOG_FILE', __FILE__ );
 
 /**
